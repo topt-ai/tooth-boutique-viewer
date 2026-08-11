@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { searchPatients } from "@/lib/patients";
 import { PATIENT_STATUS_LABELS } from "@/lib/types";
 
-export const Route = createFileRoute("/_authenticated/patients")({
+export const Route = createFileRoute("/_authenticated/patients/")({
   head: () => ({
     meta: [
       { title: "Pacientes — Tooth Boutique" },
