@@ -60,7 +60,7 @@ export function NewVisitDialog({ patientId, open, onOpenChange }: Props) {
           id: crypto.randomUUID(),
           file,
           preview: URL.createObjectURL(file),
-          photoType: PHOTO_TYPES[Math.min(typeIndex, PHOTO_TYPES.length - 1)],
+          photoType: PHOTO_TYPES[Math.min(typeIndex, PHOTO_TYPES.length - 1)] ?? "otro",
         });
         typeIndex += 1;
       }

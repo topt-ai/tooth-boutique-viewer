@@ -86,7 +86,10 @@ export function PatientFormDialog({ open, onOpenChange, patient, onSaved }: Prop
           className="grid gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!form.name.trim()) return toast.error("El nombre es obligatorio");
+            if (!form.name.trim()) {
+              toast.error("El nombre es obligatorio");
+              return;
+            }
             mutation.mutate();
           }}
         >

@@ -71,7 +71,7 @@ export async function createVisitWithPhotos(params: {
     const path = `${params.patientId}/${v.id}/${item.photoType}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
     const { error: upErr } = await supabase.storage
       .from(PHOTO_BUCKET)
-      .upload(path, item.file, { contentType: item.file.type || undefined, upsert: false });
+      .upload(path, item.file, { upsert: false, ...(item.file.type ? { contentType: item.file.type } : {}) });
     if (upErr) throw upErr;
 
     const { error: insErr } = await supabase.from("photos").insert({
