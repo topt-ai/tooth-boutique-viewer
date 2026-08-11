@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Search, UserPlus, Image as ImageIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { searchPatients } from "@/lib/patients";
 import { PATIENT_STATUS_LABELS } from "@/lib/types";
+import { PatientFormDialog } from "@/components/app/PatientFormDialog";
 
-export const Route = createFileRoute("/_authenticated/patients")({
+export const Route = createFileRoute("/_authenticated/patients/")({
   head: () => ({
     meta: [
       { title: "Pacientes — Tooth Boutique" },
@@ -22,6 +23,8 @@ export const Route = createFileRoute("/_authenticated/patients")({
 
 function PatientsPage() {
   const [term, setTerm] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const navigate = useNavigate();
   const { data, isLoading, error } = useQuery({
     queryKey: ["patients", term],
     queryFn: () => searchPatients(term),
@@ -36,11 +39,17 @@ function PatientsPage() {
             Busca una ficha o crea una nueva para empezar a registrar fotos.
           </p>
         </div>
-        <Button disabled className="shrink-0">
+        <Button className="shrink-0" onClick={() => setCreateOpen(true)}>
           <UserPlus className="mr-2 h-4 w-4" />
           Nuevo paciente
         </Button>
       </div>
+
+      <PatientFormDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSaved={(p) => navigate({ to: "/patients/$patientId", params: { patientId: p.id } })}
+      />
 
       <div className="relative mt-6">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -67,7 +76,8 @@ function PatientsPage() {
           : (data ?? []).map((p) => (
               <Link
                 key={p.id}
-                to="/patients"
+                to="/patients/$patientId"
+                params={{ patientId: p.id }}
                 className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft transition-all hover:-translate-y-0.5 hover:border-primary/40"
               >
                 <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl surface-gradient">
