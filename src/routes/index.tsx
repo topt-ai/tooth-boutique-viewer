@@ -56,7 +56,7 @@ function LoginPage() {
     <main className="flex min-h-screen items-center justify-center surface-gradient px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center">
-          <img src={logo} alt="Tooth Boutique" width={72} height={72} className="h-18 w-18" />
+          <img src={logo} alt="Tooth Boutique" width={72} height={72} className="h-16 w-16" />
           <h1 className="mt-4 text-2xl font-semibold tracking-tight">Tooth Boutique</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Gestión de fotos y progreso de pacientes
