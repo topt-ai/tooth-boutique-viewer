@@ -14,6 +14,74 @@ export type Database = {
   }
   public: {
     Tables: {
+      comparison_shares: {
+        Row: {
+          after_label: string
+          after_photo_id: string
+          before_label: string
+          before_photo_id: string
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          patient_id: string
+          revoked_at: string | null
+        }
+        Insert: {
+          after_label: string
+          after_photo_id: string
+          before_label: string
+          before_photo_id: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          patient_id: string
+          revoked_at?: string | null
+        }
+        Update: {
+          after_label?: string
+          after_photo_id?: string
+          before_label?: string
+          before_photo_id?: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          patient_id?: string
+          revoked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comparison_shares_after_photo_id_fkey"
+            columns: ["after_photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comparison_shares_before_photo_id_fkey"
+            columns: ["before_photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comparison_shares_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comparison_shares_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           birth_date: string | null
@@ -201,7 +269,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_comparison_share: {
+        Args: { p_id: string }
+        Returns: {
+          after_label: string
+          after_path: string
+          before_label: string
+          before_path: string
+          patient_name: string
+        }[]
+      }
+      is_admin: { Args: never; Returns: boolean }
       resolve_staff_email: { Args: { p_username: string }; Returns: string }
+      storage_path_is_shared: { Args: { p_path: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

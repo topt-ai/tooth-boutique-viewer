@@ -325,7 +325,13 @@ function PatientProfilePage() {
       <PatientFormDialog open={editOpen} onOpenChange={setEditOpen} patient={patient ?? null} />
       <NewVisitDialog patientId={patientId} open={visitOpen} onOpenChange={setVisitOpen} />
       {patient ? (
-        <CompareDialog open={compareOpen} onOpenChange={setCompareOpen} visits={visits} patientName={patient.name} />
+        <CompareDialog
+          open={compareOpen}
+          onOpenChange={setCompareOpen}
+          visits={visits}
+          patientId={patientId}
+          patientName={patient.name}
+        />
       ) : null}
 
       <AlertDialog open={Boolean(photoToDelete)} onOpenChange={(v) => { if (!v) setPhotoToDelete(null); }}>
