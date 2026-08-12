@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
 interface Props {
   beforeUrl: string;
@@ -8,17 +8,21 @@ interface Props {
   afterLabel?: string;
 }
 
+type ImgStatus = "loading" | "loaded" | "error";
+
 export function CompareSlider({ beforeUrl, afterUrl, beforeLabel = "Antes", afterLabel = "Después" }: Props) {
   const [pos, setPos] = useState(50);
-  const [beforeLoaded, setBeforeLoaded] = useState(false);
-  const [afterLoaded, setAfterLoaded] = useState(false);
+  const [beforeStatus, setBeforeStatus] = useState<ImgStatus>("loading");
+  const [afterStatus, setAfterStatus] = useState<ImgStatus>("loading");
 
   useEffect(() => {
-    setBeforeLoaded(false);
-    setAfterLoaded(false);
+    setBeforeStatus("loading");
+    setAfterStatus("loading");
   }, [beforeUrl, afterUrl]);
 
-  const loading = !beforeLoaded || !afterLoaded;
+  const loading = beforeStatus === "loading" || afterStatus === "loading";
+  const failed = beforeStatus === "error" || afterStatus === "error";
+  const visible = !loading && !failed;
 
   return (
     <div className="w-full">
@@ -26,20 +30,28 @@ export function CompareSlider({ beforeUrl, afterUrl, beforeLabel = "Antes", afte
         <img
           src={afterUrl}
           alt={afterLabel}
-          onLoad={() => setAfterLoaded(true)}
-          className={`block max-h-[70vh] w-full object-contain transition-opacity duration-200 ${loading ? "opacity-0" : "opacity-100"}`}
+          onLoad={() => setAfterStatus("loaded")}
+          onError={() => setAfterStatus("error")}
+          className={`block max-h-[70vh] w-full object-contain transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}
         />
         <div className="absolute inset-0 overflow-hidden" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
           <img
             src={beforeUrl}
             alt={beforeLabel}
-            onLoad={() => setBeforeLoaded(true)}
-            className={`block h-full w-full object-contain transition-opacity duration-200 ${loading ? "opacity-0" : "opacity-100"}`}
+            onLoad={() => setBeforeStatus("loaded")}
+            onError={() => setBeforeStatus("error")}
+            className={`block h-full w-full object-contain transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}
           />
         </div>
-        {loading ? (
+        {loading && !failed ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-white/70" />
+          </div>
+        ) : null}
+        {failed ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
+            <AlertCircle className="h-6 w-6 text-white/70" />
+            <p className="text-xs text-white/70">No se pudieron cargar las imágenes.</p>
           </div>
         ) : null}
         <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-white/90 shadow" style={{ left: `${pos}%` }} />
