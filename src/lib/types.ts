@@ -4,6 +4,7 @@ export interface Patient {
   id: string;
   dentalink_id: string | null;
   name: string;
+  email: string | null;
   birth_date: string | null;
   phone: string | null;
   treatment_type: string | null;
