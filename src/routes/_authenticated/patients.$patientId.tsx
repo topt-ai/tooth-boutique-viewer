@@ -246,7 +246,7 @@ function PatientProfilePage() {
                               onClick={() =>
                                 toggle(
                                   photo.id,
-                                  photo.url,
+                                  photo.fullUrl ?? photo.url,
                                   `${PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type} · ${fmtDate(visit.visit_date)}`,
                                 )
                               }
@@ -302,7 +302,7 @@ function PatientProfilePage() {
                               onClick={() =>
                                 toggle(
                                   photo.id,
-                                  photo.url,
+                                  photo.fullUrl ?? photo.url,
                                   `${PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type} · ${fmtDate(visit.visit_date)}`,
                                 )
                               }

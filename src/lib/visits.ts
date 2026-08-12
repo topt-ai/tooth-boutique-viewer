@@ -51,7 +51,7 @@ async function uploadResumable(path: string, file: File, onProgress?: (value: nu
 }
 
 export interface VisitWithPhotos extends Visit {
-  photos: (Photo & { url: string | null })[];
+  photos: (Photo & { url: string | null; fullUrl: string | null })[];
 }
 
 export async function getVisits(patientId: string): Promise<VisitWithPhotos[]> {
@@ -71,7 +71,10 @@ export async function getVisits(patientId: string): Promise<VisitWithPhotos[]> {
     .order("created_at", { ascending: true });
 
   const list = (photos ?? []) as Photo[];
-  const paths = list.map((p) => p.thumbnail_path ?? p.storage_path);
+  // Thumbnail (grid display) and original (compare/export) can be different files,
+  // so both need their own signed URL — using the thumbnail for a full-size compare
+  // or PDF export produces a visibly pixelated result.
+  const paths = [...new Set(list.flatMap((p) => [p.thumbnail_path ?? p.storage_path, p.storage_path]))];
   const urlByPath = new Map<string, string>();
   if (paths.length) {
     const { data: signed } = await supabase.storage
@@ -84,7 +87,11 @@ export async function getVisits(patientId: string): Promise<VisitWithPhotos[]> {
     ...v,
     photos: list
       .filter((p) => p.visit_id === v.id)
-      .map((p) => ({ ...p, url: urlByPath.get(p.thumbnail_path ?? p.storage_path) ?? null })),
+      .map((p) => ({
+        ...p,
+        url: urlByPath.get(p.thumbnail_path ?? p.storage_path) ?? null,
+        fullUrl: urlByPath.get(p.storage_path) ?? null,
+      })),
   }));
 }
 

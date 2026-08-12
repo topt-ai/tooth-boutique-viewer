@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { FileDown } from "lucide-react";
 import {
@@ -26,12 +26,20 @@ function fmt(v: VisitWithPhotos) {
 }
 
 export function CompareDialog({ open, onOpenChange, visits, patientName }: Props) {
-  const withPhotos = visits.filter((v) => v.photos.length > 0);
-  const [beforeId, setBeforeId] = useState(() => withPhotos[withPhotos.length - 1]?.id ?? "");
-  const [afterId, setAfterId] = useState(() => withPhotos[0]?.id ?? "");
+  const withPhotos = useMemo(() => visits.filter((v) => v.photos.length > 0), [visits]);
+  const [beforeId, setBeforeId] = useState("");
+  const [afterId, setAfterId] = useState("");
   const [type, setType] = useState("");
   const [pos, setPos] = useState(50);
   const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    if (!withPhotos.length) return;
+    const oldest = withPhotos[withPhotos.length - 1]?.id;
+    const newest = withPhotos[0]?.id;
+    if (oldest) setBeforeId((prev) => (withPhotos.some((v) => v.id === prev) ? prev : oldest));
+    if (newest) setAfterId((prev) => (withPhotos.some((v) => v.id === prev) ? prev : newest));
+  }, [withPhotos]);
 
   const before = withPhotos.find((v) => v.id === beforeId);
   const after = withPhotos.find((v) => v.id === afterId);
@@ -45,17 +53,19 @@ export function CompareDialog({ open, onOpenChange, visits, patientName }: Props
   const activeType = sharedTypes.includes(type) ? type : (sharedTypes[0] ?? "");
   const beforePhoto = before?.photos.find((p) => p.photo_type === activeType);
   const afterPhoto = after?.photos.find((p) => p.photo_type === activeType);
+  const beforeUrl = beforePhoto ? (beforePhoto.fullUrl ?? beforePhoto.url) : null;
+  const afterUrl = afterPhoto ? (afterPhoto.fullUrl ?? afterPhoto.url) : null;
 
   const handleExport = async () => {
-    if (!beforePhoto?.url || !afterPhoto?.url || !before || !after) return;
+    if (!beforeUrl || !afterUrl || !before || !after) return;
     setExporting(true);
     try {
       await exportPhotosPdf({
         patientName,
         subtitle: `Comparación ${fmt(before)} → ${fmt(after)}`,
         photos: [
-          { url: beforePhoto.url, caption: `Antes · ${fmt(before)}` },
-          { url: afterPhoto.url, caption: `Después · ${fmt(after)}` },
+          { url: beforeUrl, caption: `Antes · ${fmt(before)}` },
+          { url: afterUrl, caption: `Después · ${fmt(after)}` },
         ],
       });
     } catch {
@@ -107,15 +117,15 @@ export function CompareDialog({ open, onOpenChange, visits, patientName }: Props
           </div>
         </div>
 
-        {beforePhoto?.url && afterPhoto?.url ? (
+        {beforeUrl && afterUrl ? (
           <>
             <div className="relative select-none overflow-hidden rounded-2xl border border-border bg-black">
-              <img src={afterPhoto.url} alt="Después" className="block max-h-[52vh] w-full object-contain" />
+              <img src={afterUrl} alt="Después" className="block max-h-[52vh] w-full object-contain" />
               <div
                 className="absolute inset-0 overflow-hidden"
                 style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}
               >
-                <img src={beforePhoto.url} alt="Antes" className="block h-full w-full object-contain" />
+                <img src={beforeUrl} alt="Antes" className="block h-full w-full object-contain" />
               </div>
               <div
                 className="pointer-events-none absolute inset-y-0 w-0.5 bg-white/90 shadow"
