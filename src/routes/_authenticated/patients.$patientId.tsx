@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowLeft, CalendarPlus, FileDown, GitCompareArrows, Image as ImageIcon, Pencil,
+  ArrowLeft, CalendarPlus, FileDown, GitCompareArrows, Image as ImageIcon, Pencil, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { getPatient } from "@/lib/patients";
-import { getVisits } from "@/lib/visits";
+import { deletePhoto, getVisits, type VisitWithPhotos } from "@/lib/visits";
 import { PATIENT_STATUS_LABELS, PHOTO_TYPE_LABELS } from "@/lib/types";
 import { PatientFormDialog } from "@/components/app/PatientFormDialog";
 import { NewVisitDialog } from "@/components/app/NewVisitDialog";
@@ -40,13 +44,32 @@ function PatientProfilePage() {
   const [compareOpen, setCompareOpen] = useState(false);
   const [selected, setSelected] = useState<Record<string, { url: string; caption: string }>>({});
   const [exporting, setExporting] = useState(false);
+  const [photoToDelete, setPhotoToDelete] = useState<VisitWithPhotos["photos"][number] | null>(null);
 
+  const queryClient = useQueryClient();
   const patientQuery = useQuery({ queryKey: ["patient", patientId], queryFn: () => getPatient(patientId) });
   const visitsQuery = useQuery({ queryKey: ["visits", patientId], queryFn: () => getVisits(patientId) });
 
   const patient = patientQuery.data;
   const visits = visitsQuery.data ?? [];
   const selectedList = Object.values(selected);
+
+  const deleteMutation = useMutation({
+    mutationFn: (photo: { id: string; storage_path: string; thumbnail_path: string | null }) => deletePhoto(photo),
+    onSuccess: (_, photo) => {
+      toast.success("Foto eliminada");
+      setSelected((prev) => {
+        if (!prev[photo.id]) return prev;
+        const next = { ...prev };
+        delete next[photo.id];
+        return next;
+      });
+      queryClient.invalidateQueries({ queryKey: ["visits", patientId] });
+      queryClient.invalidateQueries({ queryKey: ["patients"] });
+    },
+    onError: () => toast.error("No se pudo eliminar la foto"),
+    onSettled: () => setPhotoToDelete(null),
+  });
 
   const toggle = (id: string, url: string | null, caption: string) => {
     if (!url) return;
@@ -167,31 +190,43 @@ function PatientProfilePage() {
                     {visit.photos.map((photo) => {
                       const isSel = Boolean(selected[photo.id]);
                       return (
-                        <button
-                          type="button"
-                          key={photo.id}
-                          onClick={() =>
-                            toggle(
-                              photo.id,
-                              photo.url,
-                              `${PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type} · ${fmtDate(visit.visit_date)}`,
-                            )
-                          }
-                          className={`overflow-hidden rounded-xl border text-left transition-all ${
-                            isSel ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/40"
-                          }`}
-                        >
-                          <div className="flex h-24 items-center justify-center surface-gradient">
-                            {photo.url ? (
-                              <img src={photo.url} alt={photo.photo_type} loading="lazy" className="h-full w-full object-cover" />
-                            ) : (
-                              <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                            )}
-                          </div>
-                          <p className="truncate px-2 py-1.5 text-[11px] text-muted-foreground">
-                            {PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type}
-                          </p>
-                        </button>
+                        <div key={photo.id} className="group relative">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggle(
+                                photo.id,
+                                photo.url,
+                                `${PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type} · ${fmtDate(visit.visit_date)}`,
+                              )
+                            }
+                            className={`w-full overflow-hidden rounded-xl border text-left transition-all ${
+                              isSel ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/40"
+                            }`}
+                          >
+                            <div className="flex h-24 items-center justify-center surface-gradient">
+                              {photo.url ? (
+                                <img src={photo.url} alt={photo.photo_type} loading="lazy" className="h-full w-full object-cover" />
+                              ) : (
+                                <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                              )}
+                            </div>
+                            <p className="truncate px-2 py-1.5 text-[11px] text-muted-foreground">
+                              {PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type}
+                            </p>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Eliminar foto"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPhotoToDelete(photo);
+                            }}
+                            className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-destructive opacity-0 shadow transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -207,6 +242,30 @@ function PatientProfilePage() {
       {patient ? (
         <CompareDialog open={compareOpen} onOpenChange={setCompareOpen} visits={visits} patientName={patient.name} />
       ) : null}
+
+      <AlertDialog open={Boolean(photoToDelete)} onOpenChange={(v) => { if (!v) setPhotoToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar esta foto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. La foto se eliminará permanentemente de la visita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (photoToDelete) deleteMutation.mutate(photoToDelete);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? "Eliminando…" : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

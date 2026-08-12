@@ -93,13 +93,11 @@ export interface PendingPhoto {
   photoType: string;
 }
 
-export async function createVisitWithPhotos(params: {
+export async function createVisit(params: {
   patientId: string;
   visitDate: string;
   visitLabel?: string | null;
   notes?: string | null;
-  photos: PendingPhoto[];
-  onProgress?: (done: number, total: number) => void;
 }) {
   const { data: visit, error } = await supabase
     .from("visits")
@@ -112,53 +110,56 @@ export async function createVisitWithPhotos(params: {
     .select()
     .single();
   if (error) throw error;
-  const v = visit as Visit;
+  return visit as Visit;
+}
 
-  let done = 0;
-  for (const item of params.photos) {
-    const ext = (item.file.name.split(".").pop() || "jpg").toLowerCase();
-    const stem = `${params.patientId}/${v.id}/${item.photoType}-${crypto.randomUUID().slice(0, 8)}`;
-    const path = `${stem}.${ext}`;
-    if (item.file.size >= LARGE_FILE_BYTES) {
-      await uploadResumable(path, item.file);
-    } else {
-      const { error: upErr } = await supabase.storage
-        .from(PHOTO_BUCKET)
-        .upload(path, item.file, { upsert: false, ...(item.file.type ? { contentType: item.file.type } : {}) });
-      if (upErr) throw upErr;
-    }
-
-    let thumbnailPath: string | null = null;
-    let width: number | null = null;
-    let height: number | null = null;
-    try {
-      const thumbnail = await createThumbnail(item.file);
-      thumbnailPath = `${stem}-thumbnail.jpg`;
-      width = thumbnail.width;
-      height = thumbnail.height;
-      const { error: thumbnailError } = await supabase.storage
-        .from(PHOTO_BUCKET)
-        .upload(thumbnailPath, thumbnail.blob, { upsert: false, contentType: "image/jpeg", cacheControl: "3600" });
-      if (thumbnailError) thumbnailPath = null;
-    } catch {
-      // Some browsers cannot decode HEIC; the original remains available as a fallback.
-    }
-
-    const { error: insErr } = await supabase.from("photos").insert({
-      visit_id: v.id,
-      photo_type: item.photoType,
-      storage_path: path,
-      thumbnail_path: thumbnailPath,
-      file_size_bytes: item.file.size,
-      width,
-      height,
-    });
-    if (insErr) throw insErr;
-    done += 1;
-    params.onProgress?.(done, params.photos.length);
+export async function uploadVisitPhoto(params: { patientId: string; visitId: string; photo: PendingPhoto }) {
+  const { patientId, visitId, photo } = params;
+  const ext = (photo.file.name.split(".").pop() || "jpg").toLowerCase();
+  const stem = `${patientId}/${visitId}/${photo.photoType}-${crypto.randomUUID().slice(0, 8)}`;
+  const path = `${stem}.${ext}`;
+  if (photo.file.size >= LARGE_FILE_BYTES) {
+    await uploadResumable(path, photo.file);
+  } else {
+    const { error: upErr } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .upload(path, photo.file, { upsert: false, ...(photo.file.type ? { contentType: photo.file.type } : {}) });
+    if (upErr) throw upErr;
   }
 
-  return v;
+  let thumbnailPath: string | null = null;
+  let width: number | null = null;
+  let height: number | null = null;
+  try {
+    const thumbnail = await createThumbnail(photo.file);
+    thumbnailPath = `${stem}-thumbnail.jpg`;
+    width = thumbnail.width;
+    height = thumbnail.height;
+    const { error: thumbnailError } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .upload(thumbnailPath, thumbnail.blob, { upsert: false, contentType: "image/jpeg", cacheControl: "3600" });
+    if (thumbnailError) thumbnailPath = null;
+  } catch {
+    // Some browsers cannot decode HEIC; the original remains available as a fallback.
+  }
+
+  const { error: insErr } = await supabase.from("photos").insert({
+    visit_id: visitId,
+    photo_type: photo.photoType,
+    storage_path: path,
+    thumbnail_path: thumbnailPath,
+    file_size_bytes: photo.file.size,
+    width,
+    height,
+  });
+  if (insErr) throw insErr;
+}
+
+export async function deletePhoto(photo: Pick<Photo, "id" | "storage_path" | "thumbnail_path">) {
+  const paths = [photo.storage_path, photo.thumbnail_path].filter((p): p is string => Boolean(p));
+  if (paths.length) await supabase.storage.from(PHOTO_BUCKET).remove(paths);
+  const { error } = await supabase.from("photos").delete().eq("id", photo.id);
+  if (error) throw error;
 }
 
 export async function deleteVisit(visitId: string) {

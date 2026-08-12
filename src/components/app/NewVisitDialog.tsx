@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { UploadCloud, X, Check } from "lucide-react";
+import { UploadCloud, X, Check, AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -14,7 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { PHOTO_TYPES, PHOTO_TYPE_LABELS } from "@/lib/types";
-import { createVisitWithPhotos } from "@/lib/visits";
+import { createVisit, uploadVisitPhoto } from "@/lib/visits";
 
 interface Props {
   patientId: string;
@@ -22,11 +22,15 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+type ItemStatus = "pending" | "uploading" | "done" | "error";
+
 interface Item {
   id: string;
   file: File;
   preview: string;
   photoType: string;
+  status: ItemStatus;
+  errorMessage?: string | undefined;
 }
 
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -38,7 +42,7 @@ export function NewVisitDialog({ patientId, open, onOpenChange }: Props) {
   const [items, setItems] = useState<Item[]>([]);
   const [dragging, setDragging] = useState(false);
   const [nextType, setNextType] = useState<string>(PHOTO_TYPES[0]);
-  const [progress, setProgress] = useState(0);
+  const [visitId, setVisitId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -61,6 +65,7 @@ export function NewVisitDialog({ patientId, open, onOpenChange }: Props) {
           file,
           preview: URL.createObjectURL(file),
           photoType: PHOTO_TYPES[Math.min(typeIndex, PHOTO_TYPES.length - 1)] ?? "otro",
+          status: "pending",
         });
         typeIndex += 1;
       }
@@ -74,39 +79,81 @@ export function NewVisitDialog({ patientId, open, onOpenChange }: Props) {
     setItems([]);
     setLabel("");
     setNotes("");
-    setProgress(0);
     setVisitDate(new Date().toISOString().slice(0, 10));
+    setVisitId(null);
+  };
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["visits", patientId] });
+    queryClient.invalidateQueries({ queryKey: ["patients"] });
   };
 
   const mutation = useMutation({
-    mutationFn: () =>
-      createVisitWithPhotos({
-        patientId,
-        visitDate,
-        visitLabel: label,
-        notes,
-        photos: items.map((i) => ({ file: i.file, photoType: i.photoType })),
-        onProgress: (done, total) => setProgress(Math.round((done / total) * 100)),
-      }),
-    onSuccess: () => {
-      toast.success("Visita registrada");
-      queryClient.invalidateQueries({ queryKey: ["visits", patientId] });
-      queryClient.invalidateQueries({ queryKey: ["patients"] });
-      reset();
-      onOpenChange(false);
+    mutationFn: async () => {
+      let currentVisitId = visitId;
+      if (!currentVisitId) {
+        const visit = await createVisit({ patientId, visitDate, visitLabel: label, notes });
+        currentVisitId = visit.id;
+        setVisitId(currentVisitId);
+      }
+
+      const pending = items.filter((i) => i.status !== "done");
+      let failedCount = 0;
+      for (const item of pending) {
+        setItems((prev) =>
+          prev.map((i) => (i.id === item.id ? { ...i, status: "uploading", errorMessage: undefined } : i)),
+        );
+        try {
+          await uploadVisitPhoto({
+            patientId,
+            visitId: currentVisitId,
+            photo: { file: item.file, photoType: item.photoType },
+          });
+          setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status: "done" } : i)));
+        } catch (err) {
+          failedCount += 1;
+          const message = err instanceof Error ? err.message : "No se pudo subir";
+          setItems((prev) =>
+            prev.map((i) => (i.id === item.id ? { ...i, status: "error", errorMessage: message } : i)),
+          );
+        }
+      }
+      return { failedCount, attempted: pending.length };
     },
-    onError: (e: unknown) =>
-      toast.error(e instanceof Error ? e.message : "No se pudo guardar la visita"),
+    onSuccess: ({ failedCount, attempted }) => {
+      invalidate();
+      if (failedCount === 0) {
+        toast.success("Visita registrada");
+        reset();
+        onOpenChange(false);
+      } else {
+        toast.error(
+          attempted === failedCount
+            ? `No se pudo subir ${failedCount === 1 ? "la foto" : `las ${failedCount} fotos`}`
+            : `${failedCount} de ${attempted} fotos fallaron. Revisa y reintenta.`,
+        );
+      }
+    },
+    onError: (e: unknown) => {
+      invalidate();
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar la visita");
+    },
   });
 
   const usedTypes = new Set(items.map((i) => i.photoType));
+  const doneCount = items.filter((i) => i.status === "done").length;
+  const hasErrors = items.some((i) => i.status === "error");
+  const progressPct = items.length ? Math.round((doneCount / items.length) * 100) : 0;
 
   return (
     <Dialog
       open={open}
       onOpenChange={(v) => {
         if (!v && mutation.isPending) return;
-        if (!v) reset();
+        if (!v) {
+          if (visitId) invalidate();
+          reset();
+        }
         onOpenChange(v);
       }}
     >
@@ -121,17 +168,29 @@ export function NewVisitDialog({ patientId, open, onOpenChange }: Props) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label htmlFor="visit_date">Fecha de la visita</Label>
-            <Input id="visit_date" type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+            <Input
+              id="visit_date"
+              type="date"
+              value={visitDate}
+              onChange={(e) => setVisitDate(e.target.value)}
+              disabled={Boolean(visitId)}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="visit_label">Etiqueta (opcional)</Label>
-            <Input id="visit_label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Control 3 meses" />
+            <Input
+              id="visit_label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Control 3 meses"
+              disabled={Boolean(visitId)}
+            />
           </div>
         </div>
 
         <div className="grid gap-2">
           <Label htmlFor="visit_notes">Notas</Label>
-          <Textarea id="visit_notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <Textarea id="visit_notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={Boolean(visitId)} />
         </div>
 
         <div className="grid gap-2">
@@ -197,26 +256,49 @@ export function NewVisitDialog({ patientId, open, onOpenChange }: Props) {
         {items.length ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
-              <div key={item.id} className="rounded-xl border border-border bg-card p-2 shadow-soft">
+              <div
+                key={item.id}
+                className={`rounded-xl border p-2 shadow-soft ${
+                  item.status === "error" ? "border-destructive/50 bg-destructive/5" : "border-border bg-card"
+                }`}
+              >
                 <div className="relative overflow-hidden rounded-lg">
                   <img src={item.preview} alt={item.file.name} className="h-32 w-full object-cover" />
-                  <button
-                    type="button"
-                    aria-label="Quitar foto"
-                    onClick={() => {
-                      URL.revokeObjectURL(item.preview);
-                      setItems((prev) => prev.filter((i) => i.id !== item.id));
-                    }}
-                    className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-foreground shadow"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  {item.status === "pending" || item.status === "error" ? (
+                    <button
+                      type="button"
+                      aria-label="Quitar foto"
+                      onClick={() => {
+                        URL.revokeObjectURL(item.preview);
+                        setItems((prev) => prev.filter((i) => i.id !== item.id));
+                      }}
+                      className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-foreground shadow"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                  {item.status === "uploading" ? (
+                    <span className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-primary shadow">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    </span>
+                  ) : null}
+                  {item.status === "done" ? (
+                    <span className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-green-600 shadow">
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                  ) : null}
+                  {item.status === "error" ? (
+                    <span className="absolute left-1 top-1 rounded-full bg-background/90 p-1 text-destructive shadow">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                    </span>
+                  ) : null}
                 </div>
                 <Select
                   value={item.photoType}
                   onValueChange={(v) =>
                     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, photoType: v } : i)))
                   }
+                  disabled={item.status === "uploading" || item.status === "done"}
                 >
                   <SelectTrigger className="mt-2 h-9 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -226,19 +308,31 @@ export function NewVisitDialog({ patientId, open, onOpenChange }: Props) {
                   </SelectContent>
                 </Select>
                 <p className="mt-1 truncate text-[11px] text-muted-foreground">{item.file.name}</p>
+                {item.status === "error" ? (
+                  <p className="mt-0.5 truncate text-[11px] text-destructive">{item.errorMessage ?? "Error al subir"}</p>
+                ) : null}
               </div>
             ))}
           </div>
         ) : null}
 
-        {mutation.isPending ? <Progress value={progress} className="h-2" /> : null}
+        {mutation.isPending || (visitId && doneCount < items.length) ? (
+          <div className="space-y-1">
+            <Progress value={progressPct} className="h-2" />
+            <p className="text-xs text-muted-foreground">{doneCount} de {items.length} fotos subidas</p>
+          </div>
+        ) : null}
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={mutation.isPending}>
             Cancelar
           </Button>
           <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-            {mutation.isPending ? `Subiendo… ${progress}%` : `Guardar visita${items.length ? ` (${items.length})` : ""}`}
+            {mutation.isPending
+              ? `Subiendo… ${progressPct}%`
+              : hasErrors
+                ? "Reintentar fotos fallidas"
+                : `Guardar visita${items.length ? ` (${items.length})` : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>
