@@ -62,7 +62,7 @@ export function CompareDialog({ open, onOpenChange, visits, patientName }: Props
     try {
       await exportPhotosPdf({
         patientName,
-        subtitle: `Comparación ${fmt(before)} → ${fmt(after)}`,
+        subtitle: `Comparación ${fmt(before)} · ${fmt(after)}`,
         photos: [
           { url: beforeUrl, caption: `Antes · ${fmt(before)}` },
           { url: afterUrl, caption: `Después · ${fmt(after)}` },
