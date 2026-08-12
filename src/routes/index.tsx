@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useSession } from "@/hooks/useSession";
+import { Footer } from "@/components/app/Footer";
 import logo from "@/assets/tooth-boutique-logo.png";
 
 export const Route = createFileRoute("/")({
@@ -53,7 +54,7 @@ function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center surface-gradient px-4 py-12">
+    <main className="relative flex min-h-screen items-center justify-center surface-gradient px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center">
           <img src={logo} alt="Tooth Boutique" width={72} height={72} className="h-16 w-16" />
@@ -107,6 +108,9 @@ function LoginPage() {
         <p className="mt-6 text-center text-xs text-muted-foreground">
           Uso interno del equipo clínico de Tooth Boutique.
         </p>
+      </div>
+      <div className="absolute inset-x-0 bottom-0">
+        <Footer />
       </div>
     </main>
   );
