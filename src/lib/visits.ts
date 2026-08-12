@@ -167,6 +167,22 @@ export async function updatePhotoType(photoId: string, photoType: string) {
   if (error) throw error;
 }
 
+export async function updateVisit(visitId: string, params: {
+  visitDate: string;
+  visitLabel?: string | null;
+  notes?: string | null;
+}) {
+  const { error } = await supabase
+    .from("visits")
+    .update({
+      visit_date: params.visitDate,
+      visit_label: params.visitLabel || null,
+      notes: params.notes || null,
+    })
+    .eq("id", visitId);
+  if (error) throw error;
+}
+
 export async function deletePhoto(photo: Pick<Photo, "id" | "storage_path" | "thumbnail_path">) {
   const paths = [photo.storage_path, photo.thumbnail_path].filter((p): p is string => Boolean(p));
   if (paths.length) await supabase.storage.from(PHOTO_BUCKET).remove(paths);

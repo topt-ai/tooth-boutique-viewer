@@ -20,6 +20,7 @@ import { deletePhoto, deleteVisit, getVisits, updatePhotoType, type VisitWithPho
 import { PATIENT_STATUS_LABELS, PHOTO_TYPES, PHOTO_TYPE_LABELS } from "@/lib/types";
 import { PatientFormDialog } from "@/components/app/PatientFormDialog";
 import { NewVisitDialog } from "@/components/app/NewVisitDialog";
+import { EditVisitDialog } from "@/components/app/EditVisitDialog";
 import { CompareDialog } from "@/components/app/CompareDialog";
 import { exportPhotosPdf } from "@/lib/pdf";
 import { useStaffRole } from "@/hooks/useStaffRole";
@@ -50,6 +51,7 @@ function PatientProfilePage() {
   const [exporting, setExporting] = useState(false);
   const [photoToDelete, setPhotoToDelete] = useState<VisitWithPhotos["photos"][number] | null>(null);
   const [visitToDelete, setVisitToDelete] = useState<VisitWithPhotos | null>(null);
+  const [visitToEdit, setVisitToEdit] = useState<VisitWithPhotos | null>(null);
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
@@ -212,6 +214,16 @@ function PatientProfilePage() {
                     {isAdmin ? (
                       <button
                         type="button"
+                        aria-label="Editar visita"
+                        onClick={() => setVisitToEdit(visit)}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      >
+                        <PencilLine className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                    {isAdmin ? (
+                      <button
+                        type="button"
                         aria-label="Eliminar visita"
                         onClick={() => setVisitToDelete(visit)}
                         className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -324,6 +336,12 @@ function PatientProfilePage() {
 
       <PatientFormDialog open={editOpen} onOpenChange={setEditOpen} patient={patient ?? null} />
       <NewVisitDialog patientId={patientId} open={visitOpen} onOpenChange={setVisitOpen} />
+      <EditVisitDialog
+        open={Boolean(visitToEdit)}
+        onOpenChange={(v) => { if (!v) setVisitToEdit(null); }}
+        patientId={patientId}
+        visit={visitToEdit}
+      />
       {patient ? (
         <CompareDialog
           open={compareOpen}
