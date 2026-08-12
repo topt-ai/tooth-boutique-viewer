@@ -31,7 +31,7 @@ export const Route = createFileRoute("/")({
 function LoginPage() {
   const navigate = useNavigate();
   const { session, loading } = useSession();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,10 +44,23 @@ function LoginPage() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+
+    const value = identifier.trim();
+    let loginEmail = value;
+    if (!value.includes("@")) {
+      const { data: resolvedEmail } = await supabase.rpc("resolve_staff_email", { p_username: value });
+      if (!resolvedEmail) {
+        setSubmitting(false);
+        setError("Credenciales inválidas. Revisa tu email/usuario y contraseña.");
+        return;
+      }
+      loginEmail = resolvedEmail;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
     setSubmitting(false);
     if (signInError) {
-      setError("Credenciales inválidas. Revisa tu email y contraseña.");
+      setError("Credenciales inválidas. Revisa tu email/usuario y contraseña.");
       return;
     }
     navigate({ to: "/patients", replace: true });
@@ -69,14 +82,14 @@ function LoginPage() {
           className="mt-8 space-y-4 rounded-2xl border border-border bg-card p-6 shadow-soft"
         >
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="identifier">Email o usuario</Label>
             <Input
-              id="email"
-              type="email"
-              autoComplete="email"
+              id="identifier"
+              type="text"
+              autoComplete="username"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               placeholder="nombre@toothboutique.cl"
             />
           </div>

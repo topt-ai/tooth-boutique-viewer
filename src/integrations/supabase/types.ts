@@ -20,6 +20,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           dentalink_id: string | null
+          email: string | null
           id: string
           name: string
           notes: string | null
@@ -34,6 +35,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           dentalink_id?: string | null
+          email?: string | null
           id?: string
           name: string
           notes?: string | null
@@ -48,6 +50,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           dentalink_id?: string | null
+          email?: string | null
           id?: string
           name?: string
           notes?: string | null
@@ -128,6 +131,7 @@ export type Database = {
           id: string
           name: string
           role: string
+          username: string | null
         }
         Insert: {
           created_at?: string
@@ -135,6 +139,7 @@ export type Database = {
           id: string
           name: string
           role?: string
+          username?: string | null
         }
         Update: {
           created_at?: string
@@ -142,6 +147,7 @@ export type Database = {
           id?: string
           name?: string
           role?: string
+          username?: string | null
         }
         Relationships: []
       }
@@ -195,7 +201,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      resolve_staff_email: { Args: { p_username: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
