@@ -1,5 +1,54 @@
+import { Upload } from "tus-js-client";
 import { supabase } from "./supabase";
 import { PHOTO_BUCKET, type Photo, type Visit } from "./types";
+
+const LARGE_FILE_BYTES = 8 * 1024 * 1024;
+const THUMBNAIL_WIDTH = 400;
+
+async function createThumbnail(file: File): Promise<{ blob: Blob; width: number; height: number }> {
+  const source = await createImageBitmap(file);
+  const scale = Math.min(1, THUMBNAIL_WIDTH / source.width);
+  const width = Math.max(1, Math.round(source.width * scale));
+  const height = Math.max(1, Math.round(source.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext("2d")?.drawImage(source, 0, 0, width, height);
+  source.close();
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("No se pudo crear el thumbnail"))), "image/jpeg", 0.82),
+  );
+  return { blob, width, height };
+}
+
+async function uploadResumable(path: string, file: File, onProgress?: (value: number) => void) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("La sesión expiró. Vuelve a iniciar sesión.");
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`;
+  await new Promise<void>((resolve, reject) => {
+    const upload = new Upload(file, {
+      endpoint: url,
+      retryDelays: [0, 1000, 3000, 5000, 10000],
+      chunkSize: 6 * 1024 * 1024,
+      uploadDataDuringCreation: true,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-upsert": "false",
+      },
+      metadata: {
+        bucketName: PHOTO_BUCKET,
+        objectName: path,
+        contentType: file.type || "application/octet-stream",
+        cacheControl: "3600",
+      },
+      onError: reject,
+      onProgress: (loaded, total) => onProgress?.(Math.round((loaded / total) * 100)),
+      onSuccess: () => resolve(),
+    });
+    upload.start();
+  });
+}
 
 export interface VisitWithPhotos extends Visit {
   photos: (Photo & { url: string | null })[];
@@ -68,17 +117,41 @@ export async function createVisitWithPhotos(params: {
   let done = 0;
   for (const item of params.photos) {
     const ext = (item.file.name.split(".").pop() || "jpg").toLowerCase();
-    const path = `${params.patientId}/${v.id}/${item.photoType}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
-    const { error: upErr } = await supabase.storage
-      .from(PHOTO_BUCKET)
-      .upload(path, item.file, { upsert: false, ...(item.file.type ? { contentType: item.file.type } : {}) });
-    if (upErr) throw upErr;
+    const stem = `${params.patientId}/${v.id}/${item.photoType}-${crypto.randomUUID().slice(0, 8)}`;
+    const path = `${stem}.${ext}`;
+    if (item.file.size >= LARGE_FILE_BYTES) {
+      await uploadResumable(path, item.file);
+    } else {
+      const { error: upErr } = await supabase.storage
+        .from(PHOTO_BUCKET)
+        .upload(path, item.file, { upsert: false, ...(item.file.type ? { contentType: item.file.type } : {}) });
+      if (upErr) throw upErr;
+    }
+
+    let thumbnailPath: string | null = null;
+    let width: number | null = null;
+    let height: number | null = null;
+    try {
+      const thumbnail = await createThumbnail(item.file);
+      thumbnailPath = `${stem}-thumbnail.jpg`;
+      width = thumbnail.width;
+      height = thumbnail.height;
+      const { error: thumbnailError } = await supabase.storage
+        .from(PHOTO_BUCKET)
+        .upload(thumbnailPath, thumbnail.blob, { upsert: false, contentType: "image/jpeg", cacheControl: "3600" });
+      if (thumbnailError) thumbnailPath = null;
+    } catch {
+      // Some browsers cannot decode HEIC; the original remains available as a fallback.
+    }
 
     const { error: insErr } = await supabase.from("photos").insert({
       visit_id: v.id,
       photo_type: item.photoType,
       storage_path: path,
+      thumbnail_path: thumbnailPath,
       file_size_bytes: item.file.size,
+      width,
+      height,
     });
     if (insErr) throw insErr;
     done += 1;
@@ -89,8 +162,10 @@ export async function createVisitWithPhotos(params: {
 }
 
 export async function deleteVisit(visitId: string) {
-  const { data: photos } = await supabase.from("photos").select("storage_path").eq("visit_id", visitId);
-  const paths = ((photos ?? []) as { storage_path: string }[]).map((p) => p.storage_path);
+  const { data: photos } = await supabase.from("photos").select("storage_path, thumbnail_path").eq("visit_id", visitId);
+  const paths = ((photos ?? []) as { storage_path: string; thumbnail_path: string | null }[]).flatMap((p) =>
+    [p.storage_path, p.thumbnail_path].filter((path): path is string => Boolean(path)),
+  );
   if (paths.length) await supabase.storage.from(PHOTO_BUCKET).remove(paths);
   await supabase.from("photos").delete().eq("visit_id", visitId);
   const { error } = await supabase.from("visits").delete().eq("id", visitId);
