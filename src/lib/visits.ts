@@ -155,6 +155,11 @@ export async function uploadVisitPhoto(params: { patientId: string; visitId: str
   if (insErr) throw insErr;
 }
 
+export async function updatePhotoType(photoId: string, photoType: string) {
+  const { error } = await supabase.from("photos").update({ photo_type: photoType }).eq("id", photoId);
+  if (error) throw error;
+}
+
 export async function deletePhoto(photo: Pick<Photo, "id" | "storage_path" | "thumbnail_path">) {
   const paths = [photo.storage_path, photo.thumbnail_path].filter((p): p is string => Boolean(p));
   if (paths.length) await supabase.storage.from(PHOTO_BUCKET).remove(paths);

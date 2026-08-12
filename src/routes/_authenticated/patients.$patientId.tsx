@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowLeft, CalendarPlus, FileDown, GitCompareArrows, Image as ImageIcon, Pencil, Trash2,
+  ArrowLeft, CalendarPlus, FileDown, GitCompareArrows, Image as ImageIcon, Pencil, PencilLine, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,13 +12,17 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { getPatient } from "@/lib/patients";
-import { deletePhoto, getVisits, type VisitWithPhotos } from "@/lib/visits";
-import { PATIENT_STATUS_LABELS, PHOTO_TYPE_LABELS } from "@/lib/types";
+import { deletePhoto, deleteVisit, getVisits, updatePhotoType, type VisitWithPhotos } from "@/lib/visits";
+import { PATIENT_STATUS_LABELS, PHOTO_TYPES, PHOTO_TYPE_LABELS } from "@/lib/types";
 import { PatientFormDialog } from "@/components/app/PatientFormDialog";
 import { NewVisitDialog } from "@/components/app/NewVisitDialog";
 import { CompareDialog } from "@/components/app/CompareDialog";
 import { exportPhotosPdf } from "@/lib/pdf";
+import { useStaffRole } from "@/hooks/useStaffRole";
 
 export const Route = createFileRoute("/_authenticated/patients/$patientId")({
   head: () => ({
@@ -45,8 +49,11 @@ function PatientProfilePage() {
   const [selected, setSelected] = useState<Record<string, { url: string; caption: string }>>({});
   const [exporting, setExporting] = useState(false);
   const [photoToDelete, setPhotoToDelete] = useState<VisitWithPhotos["photos"][number] | null>(null);
+  const [visitToDelete, setVisitToDelete] = useState<VisitWithPhotos | null>(null);
+  const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
+  const { isAdmin } = useStaffRole();
   const patientQuery = useQuery({ queryKey: ["patient", patientId], queryFn: () => getPatient(patientId) });
   const visitsQuery = useQuery({ queryKey: ["visits", patientId], queryFn: () => getVisits(patientId) });
 
@@ -69,6 +76,26 @@ function PatientProfilePage() {
     },
     onError: () => toast.error("No se pudo eliminar la foto"),
     onSettled: () => setPhotoToDelete(null),
+  });
+
+  const updateTypeMutation = useMutation({
+    mutationFn: ({ id, type }: { id: string; type: string }) => updatePhotoType(id, type),
+    onSuccess: () => {
+      toast.success("Tipo de foto actualizado");
+      queryClient.invalidateQueries({ queryKey: ["visits", patientId] });
+    },
+    onError: () => toast.error("No se pudo actualizar el tipo de foto"),
+  });
+
+  const deleteVisitMutation = useMutation({
+    mutationFn: (visitId: string) => deleteVisit(visitId),
+    onSuccess: () => {
+      toast.success("Visita eliminada");
+      queryClient.invalidateQueries({ queryKey: ["visits", patientId] });
+      queryClient.invalidateQueries({ queryKey: ["patients"] });
+    },
+    onError: () => toast.error("No se pudo eliminar la visita"),
+    onSettled: () => setVisitToDelete(null),
   });
 
   const toggle = (id: string, url: string | null, caption: string) => {
@@ -180,52 +207,110 @@ function PatientProfilePage() {
                       <p className="text-sm text-muted-foreground">{visit.visit_label}</p>
                     ) : null}
                   </div>
-                  <Badge variant="secondary">{visit.photos.length} fotos</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{visit.photos.length} fotos</Badge>
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        aria-label="Eliminar visita"
+                        onClick={() => setVisitToDelete(visit)}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
 
                 {visit.notes ? <p className="mt-2 text-sm text-muted-foreground">{visit.notes}</p> : null}
+
+                {visit.photos.length === 0 ? (
+                  <p className="mt-3 text-sm text-muted-foreground">Sin fotos en esta visita.</p>
+                ) : null}
 
                 {visit.photos.length ? (
                   <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {visit.photos.map((photo) => {
                       const isSel = Boolean(selected[photo.id]);
+                      const isEditing = editingPhotoId === photo.id;
                       return (
-                        <div key={photo.id} className="group relative">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toggle(
-                                photo.id,
-                                photo.url,
-                                `${PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type} · ${fmtDate(visit.visit_date)}`,
-                              )
-                            }
-                            className={`w-full overflow-hidden rounded-xl border text-left transition-all ${
-                              isSel ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/40"
-                            }`}
-                          >
-                            <div className="flex h-24 items-center justify-center surface-gradient">
+                        <div
+                          key={photo.id}
+                          className={`group overflow-hidden rounded-xl border transition-all ${
+                            isSel ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/40"
+                          }`}
+                        >
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggle(
+                                  photo.id,
+                                  photo.url,
+                                  `${PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type} · ${fmtDate(visit.visit_date)}`,
+                                )
+                              }
+                              className="flex h-24 w-full items-center justify-center surface-gradient"
+                            >
                               {photo.url ? (
                                 <img src={photo.url} alt={photo.photo_type} loading="lazy" className="h-full w-full object-cover" />
                               ) : (
                                 <ImageIcon className="h-5 w-5 text-muted-foreground" />
                               )}
-                            </div>
-                            <p className="truncate px-2 py-1.5 text-[11px] text-muted-foreground">
+                            </button>
+                            {isAdmin ? (
+                              <button
+                                type="button"
+                                aria-label="Editar tipo de foto"
+                                onClick={() => setEditingPhotoId(photo.id)}
+                                className="absolute left-1 top-1 rounded-full bg-background/90 p-1 text-foreground opacity-0 shadow transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                              >
+                                <PencilLine className="h-3.5 w-3.5" />
+                              </button>
+                            ) : null}
+                            {isAdmin ? (
+                              <button
+                                type="button"
+                                aria-label="Eliminar foto"
+                                onClick={() => setPhotoToDelete(photo)}
+                                className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-destructive opacity-0 shadow transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            ) : null}
+                          </div>
+
+                          {isEditing ? (
+                            <Select
+                              value={photo.photo_type}
+                              onValueChange={(v) => updateTypeMutation.mutate({ id: photo.id, type: v })}
+                              onOpenChange={(open) => { if (!open) setEditingPhotoId(null); }}
+                              defaultOpen
+                            >
+                              <SelectTrigger className="h-7 rounded-none border-0 border-t border-border text-[11px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PHOTO_TYPES.map((t) => (
+                                  <SelectItem key={t} value={t}>{PHOTO_TYPE_LABELS[t]}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggle(
+                                  photo.id,
+                                  photo.url,
+                                  `${PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type} · ${fmtDate(visit.visit_date)}`,
+                                )
+                              }
+                              className="block w-full truncate px-2 py-1.5 text-left text-[11px] text-muted-foreground"
+                            >
                               {PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type}
-                            </p>
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Eliminar foto"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPhotoToDelete(photo);
-                            }}
-                            className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-destructive opacity-0 shadow transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -262,6 +347,30 @@ function PatientProfilePage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteMutation.isPending ? "Eliminando…" : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(visitToDelete)} onOpenChange={(v) => { if (!v) setVisitToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar esta visita?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará la visita{visitToDelete ? ` del ${fmtDate(visitToDelete.visit_date)}` : ""} y todas sus fotos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteVisitMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteVisitMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (visitToDelete) deleteVisitMutation.mutate(visitToDelete.id);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteVisitMutation.isPending ? "Eliminando…" : "Eliminar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
