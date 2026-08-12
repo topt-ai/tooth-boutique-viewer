@@ -13,7 +13,7 @@ import { PatientFormDialog } from "@/components/app/PatientFormDialog";
 export const Route = createFileRoute("/_authenticated/patients/")({
   head: () => ({
     meta: [
-      { title: "Pacientes — Tooth Boutique" },
+      { title: "Pacientes — The Tooth Boutique" },
       { name: "description", content: "Búsqueda y gestión de fichas de pacientes de la clínica." },
       { name: "robots", content: "noindex" },
     ],

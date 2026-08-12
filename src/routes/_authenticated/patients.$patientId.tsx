@@ -23,7 +23,7 @@ import { exportPhotosPdf } from "@/lib/pdf";
 export const Route = createFileRoute("/_authenticated/patients/$patientId")({
   head: () => ({
     meta: [
-      { title: "Ficha de paciente — Tooth Boutique" },
+      { title: "Ficha de paciente — The Tooth Boutique" },
       { name: "description", content: "Historial fotográfico y timeline de visitas del paciente." },
       { name: "robots", content: "noindex" },
     ],

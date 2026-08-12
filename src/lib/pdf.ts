@@ -46,7 +46,7 @@ export async function exportPhotosPdf(params: {
   }
 
   doc.setFontSize(18);
-  doc.text("Tooth Boutique", margin + 32, 20);
+  doc.text("The Tooth Boutique", margin + 32, 20);
   doc.setFontSize(12);
   doc.setTextColor(90);
   doc.text(params.patientName, margin + 32, 27);

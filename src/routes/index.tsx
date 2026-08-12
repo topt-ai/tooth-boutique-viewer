@@ -12,16 +12,16 @@ import logo from "@/assets/tooth-boutique-logo.png";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Acceso staff — Tooth Boutique" },
+      { title: "Acceso staff — The Tooth Boutique" },
       {
         name: "description",
-        content: "Herramienta interna de Tooth Boutique para gestionar fotos y progreso de pacientes.",
+        content: "Herramienta interna de The Tooth Boutique para gestionar fotos y progreso de pacientes.",
       },
       { name: "robots", content: "noindex" },
-      { property: "og:title", content: "Acceso staff — Tooth Boutique" },
+      { property: "og:title", content: "Acceso staff — The Tooth Boutique" },
       {
         property: "og:description",
-        content: "Herramienta interna de Tooth Boutique para gestionar fotos y progreso de pacientes.",
+        content: "Herramienta interna de The Tooth Boutique para gestionar fotos y progreso de pacientes.",
       },
     ],
   }),
@@ -57,9 +57,9 @@ function LoginPage() {
     <main className="relative flex min-h-screen items-center justify-center surface-gradient px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center">
-          <img src={logo} alt="Tooth Boutique" width={72} height={72} className="h-16 w-16" />
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight">Tooth Boutique</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="sr-only">The Tooth Boutique</h1>
+          <img src={logo} alt="The Tooth Boutique" className="h-20 w-auto" />
+          <p className="mt-4 text-sm text-muted-foreground">
             Gestión de fotos y progreso de pacientes
           </p>
         </div>
@@ -106,7 +106,7 @@ function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Uso interno del equipo clínico de Tooth Boutique.
+          Uso interno del equipo clínico de The Tooth Boutique.
         </p>
       </div>
       <div className="absolute inset-x-0 bottom-0">

@@ -19,9 +19,8 @@ export function AppHeader({ email }: { email?: string | null }) {
   return (
     <header className="sticky top-0 z-20 border-b border-border/70 bg-card/85 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
-        <Link to="/patients" className="flex items-center gap-2.5">
-          <img src={logo} alt="Tooth Boutique" width={36} height={36} className="h-9 w-9" />
-          <span className="text-base font-semibold tracking-tight">Tooth Boutique</span>
+        <Link to="/patients" className="flex items-center">
+          <img src={logo} alt="The Tooth Boutique" className="h-8 w-auto" />
         </Link>
         <nav className="ml-6 hidden sm:flex">
           <Link
