@@ -4,19 +4,18 @@ import { PHOTO_BUCKET, type Photo, type Visit } from "./types";
 
 const LARGE_FILE_BYTES = 8 * 1024 * 1024;
 const THUMBNAIL_WIDTH = 400;
+const DISPLAY_WIDTH = 1600;
 
-async function createThumbnail(file: File): Promise<{ blob: Blob; width: number; height: number }> {
-  const source = await createImageBitmap(file);
-  const scale = Math.min(1, THUMBNAIL_WIDTH / source.width);
+async function resizeToBlob(source: ImageBitmap, maxWidth: number, quality: number): Promise<{ blob: Blob; width: number; height: number }> {
+  const scale = Math.min(1, maxWidth / source.width);
   const width = Math.max(1, Math.round(source.width * scale));
   const height = Math.max(1, Math.round(source.height * scale));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   canvas.getContext("2d")?.drawImage(source, 0, 0, width, height);
-  source.close();
   const blob = await new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("No se pudo crear el thumbnail"))), "image/jpeg", 0.82),
+    canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("No se pudo procesar la imagen"))), "image/jpeg", quality),
   );
   return { blob, width, height };
 }
@@ -51,7 +50,7 @@ async function uploadResumable(path: string, file: File, onProgress?: (value: nu
 }
 
 export interface VisitWithPhotos extends Visit {
-  photos: (Photo & { url: string | null; fullUrl: string | null })[];
+  photos: (Photo & { url: string | null; displayUrl: string | null; fullUrl: string | null })[];
 }
 
 export async function getVisits(patientId: string): Promise<VisitWithPhotos[]> {
@@ -71,10 +70,15 @@ export async function getVisits(patientId: string): Promise<VisitWithPhotos[]> {
     .order("created_at", { ascending: true });
 
   const list = (photos ?? []) as Photo[];
-  // Thumbnail (grid display) and original (compare/export) can be different files,
-  // so both need their own signed URL — using the thumbnail for a full-size compare
-  // or PDF export produces a visibly pixelated result.
-  const paths = [...new Set(list.flatMap((p) => [p.thumbnail_path ?? p.storage_path, p.storage_path]))];
+  // Three variants, three separate signed URLs: thumbnail for the grid, display
+  // (~1600px) for comparing/exporting/sharing, and the original as a last resort
+  // for photos uploaded before the display variant existed. Using the thumbnail
+  // for a full-size compare looks pixelated; using the original is slow to load.
+  const paths = [...new Set(list.flatMap((p) => [
+    p.thumbnail_path ?? p.storage_path,
+    p.display_path ?? p.storage_path,
+    p.storage_path,
+  ]))];
   const urlByPath = new Map<string, string>();
   if (paths.length) {
     const { data: signed } = await supabase.storage
@@ -90,6 +94,7 @@ export async function getVisits(patientId: string): Promise<VisitWithPhotos[]> {
       .map((p) => ({
         ...p,
         url: urlByPath.get(p.thumbnail_path ?? p.storage_path) ?? null,
+        displayUrl: urlByPath.get(p.display_path ?? p.storage_path) ?? null,
         fullUrl: urlByPath.get(p.storage_path) ?? null,
       })),
   }));
@@ -135,17 +140,33 @@ export async function uploadVisitPhoto(params: { patientId: string; visitId: str
   }
 
   let thumbnailPath: string | null = null;
+  let displayPath: string | null = null;
   let width: number | null = null;
   let height: number | null = null;
   try {
-    const thumbnail = await createThumbnail(photo.file);
-    thumbnailPath = `${stem}-thumbnail.jpg`;
+    const source = await createImageBitmap(photo.file);
+
+    const thumbnail = await resizeToBlob(source, THUMBNAIL_WIDTH, 0.82);
     width = thumbnail.width;
     height = thumbnail.height;
+    thumbnailPath = `${stem}-thumbnail.jpg`;
     const { error: thumbnailError } = await supabase.storage
       .from(PHOTO_BUCKET)
       .upload(thumbnailPath, thumbnail.blob, { upsert: false, contentType: "image/jpeg", cacheControl: "3600" });
     if (thumbnailError) thumbnailPath = null;
+
+    // Only worth a separate file when the original is meaningfully bigger —
+    // otherwise the original is already display-sized.
+    if (source.width > DISPLAY_WIDTH) {
+      const display = await resizeToBlob(source, DISPLAY_WIDTH, 0.86);
+      displayPath = `${stem}-display.jpg`;
+      const { error: displayError } = await supabase.storage
+        .from(PHOTO_BUCKET)
+        .upload(displayPath, display.blob, { upsert: false, contentType: "image/jpeg", cacheControl: "3600" });
+      if (displayError) displayPath = null;
+    }
+
+    source.close();
   } catch {
     // Some browsers cannot decode HEIC; the original remains available as a fallback.
   }
@@ -155,6 +176,7 @@ export async function uploadVisitPhoto(params: { patientId: string; visitId: str
     photo_type: photo.photoType,
     storage_path: path,
     thumbnail_path: thumbnailPath,
+    display_path: displayPath,
     file_size_bytes: photo.file.size,
     width,
     height,
@@ -183,17 +205,17 @@ export async function updateVisit(visitId: string, params: {
   if (error) throw error;
 }
 
-export async function deletePhoto(photo: Pick<Photo, "id" | "storage_path" | "thumbnail_path">) {
-  const paths = [photo.storage_path, photo.thumbnail_path].filter((p): p is string => Boolean(p));
+export async function deletePhoto(photo: Pick<Photo, "id" | "storage_path" | "thumbnail_path" | "display_path">) {
+  const paths = [photo.storage_path, photo.thumbnail_path, photo.display_path].filter((p): p is string => Boolean(p));
   if (paths.length) await supabase.storage.from(PHOTO_BUCKET).remove(paths);
   const { error } = await supabase.from("photos").delete().eq("id", photo.id);
   if (error) throw error;
 }
 
 export async function deleteVisit(visitId: string) {
-  const { data: photos } = await supabase.from("photos").select("storage_path, thumbnail_path").eq("visit_id", visitId);
-  const paths = ((photos ?? []) as { storage_path: string; thumbnail_path: string | null }[]).flatMap((p) =>
-    [p.storage_path, p.thumbnail_path].filter((path): path is string => Boolean(path)),
+  const { data: photos } = await supabase.from("photos").select("storage_path, thumbnail_path, display_path").eq("visit_id", visitId);
+  const paths = ((photos ?? []) as { storage_path: string; thumbnail_path: string | null; display_path: string | null }[]).flatMap((p) =>
+    [p.storage_path, p.thumbnail_path, p.display_path].filter((path): path is string => Boolean(path)),
   );
   if (paths.length) await supabase.storage.from(PHOTO_BUCKET).remove(paths);
   await supabase.from("photos").delete().eq("visit_id", visitId);

@@ -27,6 +27,7 @@ export interface Photo {
   photo_type: string;
   storage_path: string;
   thumbnail_path: string | null;
+  display_path: string | null;
   file_size_bytes: number | null;
   width: number | null;
   height: number | null;

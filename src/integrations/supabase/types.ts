@@ -142,6 +142,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          display_path: string | null
           file_size_bytes: number | null
           height: number | null
           id: string
@@ -154,6 +155,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          display_path?: string | null
           file_size_bytes?: number | null
           height?: number | null
           id?: string
@@ -166,6 +168,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          display_path?: string | null
           file_size_bytes?: number | null
           height?: number | null
           id?: string

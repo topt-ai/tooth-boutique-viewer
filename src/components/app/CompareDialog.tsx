@@ -64,8 +64,8 @@ export function CompareDialog({ open, onOpenChange, visits, patientId, patientNa
   const activeType = sharedTypes.includes(type) ? type : (sharedTypes[0] ?? "");
   const beforePhoto = before?.photos.find((p) => p.photo_type === activeType);
   const afterPhoto = after?.photos.find((p) => p.photo_type === activeType);
-  const beforeUrl = beforePhoto ? (beforePhoto.fullUrl ?? beforePhoto.url) : null;
-  const afterUrl = afterPhoto ? (afterPhoto.fullUrl ?? afterPhoto.url) : null;
+  const beforeUrl = beforePhoto ? (beforePhoto.displayUrl ?? beforePhoto.fullUrl ?? beforePhoto.url) : null;
+  const afterUrl = afterPhoto ? (afterPhoto.displayUrl ?? afterPhoto.fullUrl ?? afterPhoto.url) : null;
 
   const shareMutation = useMutation({
     mutationFn: () => {

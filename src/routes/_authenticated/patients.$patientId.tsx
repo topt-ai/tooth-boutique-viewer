@@ -64,7 +64,8 @@ function PatientProfilePage() {
   const selectedList = Object.values(selected);
 
   const deleteMutation = useMutation({
-    mutationFn: (photo: { id: string; storage_path: string; thumbnail_path: string | null }) => deletePhoto(photo),
+    mutationFn: (photo: { id: string; storage_path: string; thumbnail_path: string | null; display_path: string | null }) =>
+      deletePhoto(photo),
     onSuccess: (_, photo) => {
       toast.success("Foto eliminada");
       setSelected((prev) => {
@@ -258,7 +259,7 @@ function PatientProfilePage() {
                               onClick={() =>
                                 toggle(
                                   photo.id,
-                                  photo.fullUrl ?? photo.url,
+                                  photo.displayUrl ?? photo.fullUrl ?? photo.url,
                                   `${PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type} · ${fmtDate(visit.visit_date)}`,
                                 )
                               }
@@ -314,7 +315,7 @@ function PatientProfilePage() {
                               onClick={() =>
                                 toggle(
                                   photo.id,
-                                  photo.fullUrl ?? photo.url,
+                                  photo.displayUrl ?? photo.fullUrl ?? photo.url,
                                   `${PHOTO_TYPE_LABELS[photo.photo_type] ?? photo.photo_type} · ${fmtDate(visit.visit_date)}`,
                                 )
                               }
